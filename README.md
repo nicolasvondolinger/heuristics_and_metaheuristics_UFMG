@@ -1,1 +1,1 @@
-# heuristics_and_metaheuristics_ufmg
+# Heuristics and Metaheuristics - UFMG
