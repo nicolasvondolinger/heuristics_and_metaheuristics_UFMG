@@ -92,8 +92,11 @@
 // /,,****,**,****,*,,,,,*#%&%###%%%####%%%%###%%%####%%%%%%##%%&%#(###############(///*/(#############(/#%&%%%%%%%%%%%%%#%%&&%%%##%%%#######((((*,,,,*,,*,,,,,,***,****/(((#
     
 #include <bits/stdc++.h>
+#include <filesystem>
 
 using namespace std;
+using namespace filesystem;
+using namespace chrono;
  
 #define _ ios_base::sync_with_stdio(0); cin.tie(0);
 #define all(a) (a).begin(), (a).end()
@@ -137,7 +140,7 @@ ll clarkeWright(int c){
         }
     }
 
-    sort(economy.begin(), economy.end(), greater<pair<ll, pair<int, int>>>());
+    sort(all(economy), greater<pair<ll, pair<int, int>>>());
 
     vector<int> count(n, 0);
     unionFind = vector<int>(n);
@@ -158,74 +161,86 @@ ll clarkeWright(int c){
 }
 
 int main(int argc, char* argv[]){ 
-    string filename = argv[1];
-    ifstream file(filename);
-    
-    if (!file.is_open()) {
-        cerr << "Error: Could not open file " << filename << endl;
-        return 1;
-    }
+    string repoPath = "../instances/";
+    ofstream outputFile("results.txt");
 
-    string line, keyword, value;
-    string weightType;
+    for (const auto& entry : directory_iterator(repoPath)){
+        string filename = entry.path().string();
+        ifstream file(filename);
 
-    while (getline(file, line)) {
-        istringstream iss(line); iss >> keyword;
-        string discart; iss >> discart;
-        
-        if (keyword == "TYPE") {
-            iss >> value;
-            if (value != "TSP") {
-                cerr << "Error: Unsupported problem type: " << value << endl;
-                return 1;
-            }
-        } else if(keyword == "EDGE_WEIGHT_TYPE"){
-            iss >> weightType;
-            if(weightType != "EUC_2D" && weightType != "ATT"){
-                cerr << "Error: Unsupported edge weight type " << weightType << endl;
-                return 1;
-            }
-        } else if(keyword == "DIMENSION"){
-            iss >> n; 
-            graph = vector<vector<int>>(n);
-            positions = vector<pair<double, double>>(n);
-            edgeWeights = vector<vector<int>>(n, vector<int>(n, INF));
-        } else if(keyword == "NODE_COORD_SECTION"){
-            while (getline(file, line)){
-                if (line == "EOF") break;
-                istringstream temp(line);
-                int p; double x, y; temp >> p >> x >> y;
-                positions[p-1].ff = x; positions[p-1].ss = y;
-            }
-        } else if (keyword == "NAME" || keyword == "COMMENT" || keyword == "DISPLAY_DATA_TYPE") continue;
-        else {
-            cerr << "Error: Unsupported input type: " << keyword << " " << value << endl;
+        if (!file.is_open()) {
+            cerr << "Error: Could not open file " << filename << endl;
             return 1;
         }
+
+        string line, keyword, value;
+        string weightType;
+
+        while (getline(file, line)) {
+            istringstream iss(line); iss >> keyword;
+            string discart; if(keyword[keyword.size()-1]!=':') iss >> discart;
+            
+            if (keyword == "TYPE:") {
+                iss >> value;
+                if (value != "TSP") {
+                    cerr << "Error: Unsupported problem type: " << value << endl;
+                    return 1;
+                }
+            } else if(keyword == "EDGE_WEIGHT_TYPE"){
+                iss >> weightType;
+                if(weightType != "EUC_2D" && weightType != "ATT"){
+                    cerr << "Error: Unsupported edge weight type " << weightType << endl;
+                    return 1;
+                }
+            } else if(keyword == "DIMENSION:"){
+                iss >> n; 
+                graph = vector<vector<int>>(n);
+                positions = vector<pair<double, double>>(n);
+                edgeWeights = vector<vector<int>>(n, vector<int>(n, INF));
+            } else if(keyword == "NODE_COORD_SECTION"){
+                while (getline(file, line)){
+                    if (line == "EOF") break;
+                    istringstream temp(line);
+                    int p; double x, y; temp >> p >> x >> y;
+                    positions[p-1].ff = x; positions[p-1].ss = y;
+                }
+            } else if (keyword == "NAME:" || keyword == "COMMENT:" || keyword == "DISPLAY_DATA_TYPE:") continue;
+            else {
+                cerr << "Error: Unsupported input type: " << keyword << " " << value << endl;
+                return 1;
+            }
+        }
+
+        for(int i = 0; i < n; i++){
+            for(int j = 0; j < n; j++){
+                if(i != j) graph[i].push_back(j);
+            }
+        }
+
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < graph[i].size(); j++) {  
+                int w = graph[i][j];
+                double x1 = positions[i].first;
+                double y1 = positions[i].second;
+                double x2 = positions[w].first;
+                double y2 = positions[w].second;
+
+                if(weightType=="EUC_2D") edgeWeights[i][w] = euclidean_distance(x1, x2, y1, y2);
+                else edgeWeights[i][w] = pseudoeuclian_distance(x1, x2, y1, y2);
+            }
+        } 
+        
+        auto start = high_resolution_clock::now();
+        ll ans = LINF;
+        for(ll c = 0; c < n; c++) ans = min(ans, clarkeWright(c));
+        
+        auto end = high_resolution_clock::now();
+        auto duration = duration_cast<milliseconds>(end - start);
+
+        outputFile << filename.substr(13) <<": " << ans << " " << duration.count() << endl;
+
     }
 
-    for(int i = 0; i < n; i++){
-        for(int j = 0; j < n; j++){
-            if(i != j) graph[i].push_back(j);
-        }
-    }
-
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < graph[i].size(); j++) {  
-            int w = graph[i][j];
-            double x1 = positions[i].first;
-            double y1 = positions[i].second;
-            double x2 = positions[w].first;
-            double y2 = positions[w].second;
-
-            if(weightType=="EUC_2D") edgeWeights[i][w] = euclidean_distance(x1, x2, y1, y2);
-            else edgeWeights[i][w] = pseudoeuclian_distance(x1, x2, y1, y2);
-        }
-    } 
-
-    ll ans = LINF;
-    for(ll c = 0; c < n; c++) ans = min(ans, clarkeWright(c));
-    cout << ans << endl;
-
+    outputFile.close();
     exit(0);
 }
