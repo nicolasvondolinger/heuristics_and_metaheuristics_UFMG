@@ -123,41 +123,90 @@ double pseudoeuclian_distance(double x1, double x2, double y1, double y2){
 
 vector<pair<double, double>> positions;
 vector<vector<int>> graph, edgeWeights;
-vector<int> unionFind;
-int n = 0;
 
-int find(int v){
-    if(unionFind[v] == v) return v;
-    return unionFind[v] = find(unionFind[v]);
+int n = 0;
+random_device rd;
+mt19937 gen(rd());
+
+pair<vector<int>, ll> construct_solution(double alpha){
+    vector<int> tour;
+    vector<bool> visited(n, false);
+    ll finalCost = 0;
+
+    uniform_int_distribution<> dis_node(0, n-1);
+    int beginNode = dis_node(gen), node = beginNode;
+    tour.pb(node); visited[node] = true;
+
+    for(int i = 1; i < n; i++){
+
+        vector<pair<int, int>> candidates;
+        int minCost = INF, maxCost = -1;
+
+        for(int v = 0; v < n; v++)if(!visited[v]){
+            int cost = edgeWeights[node][v];
+            candidates.pb({cost, v});
+            minCost = min(minCost, cost);
+            maxCost = max(maxCost, cost);
+        }
+
+        // Restricted Candidate List
+        vector<int> rcl;
+
+        int limit = minCost + (int)(alpha * (maxCost-minCost));
+
+        for(const auto &p: candidates){
+            if(p.ff <= limit) rcl.pb(p.ss);
+        }
+
+        if(rcl.empty()){
+            for(const auto &p: candidates){
+                if(p.ff == minCost) rcl.pb(p.ss);
+            }
+        }
+
+        uniform_int_distribution<> rclDis(0, rcl.size()-1);
+
+        int chosenNode = rcl[rclDis(gen)];
+
+        tour.pb(chosenNode); visited[chosenNode] = true;
+        finalCost += edgeWeights[node][chosenNode];
+        node = chosenNode;
+    }
+
+    finalCost += edgeWeights[node][beginNode];
+    return {tour, finalCost};
 }
 
-ll clarkeWright(int c){
-    vector<pair<ll, pair<int, int>>> economy;
-    for(int i = 0; i < n; i++){
-        for(int j = 0; j < n; j++)if(j!=c && i!=j){
-            ll ans = edgeWeights[c][i] + edgeWeights[c][j] - edgeWeights[i][j];
-            economy.pb({ans, {i, j}});
+void local_search(vector<int>& tour, ll& cost){
+
+    bool improved = false;
+
+    while(!improved){
+        improved = true;
+
+        for(int i = 0; i < n-1; i++){
+            for(int j = i+1; j < n; j++){
+                int u1 = tour[i];
+                int v1 = tour[i+1];
+                int u2 = tour[j];
+                int v2 = tour[(j+1)%n];
+
+                int currentCost = edgeWeights[u1][v1] + edgeWeights[u2][v2];
+                int newCost = edgeWeights[u1][u2] + edgeWeights[v1][v2];
+
+                ll delta = currentCost - newCost;
+
+                if(delta > 0){
+
+                    reverse(tour.begin() + i + 1, tour.begin() + j + 1);
+                    cost -= delta;
+                    improved = false;
+                    continue;
+                }
+            }
         }
     }
 
-    sort(all(economy), greater<pair<ll, pair<int, int>>>());
-
-    vector<int> count(n, 0);
-    unionFind = vector<int>(n);
-    for(int i = 0; i < n; i++) unionFind[i] = i;
-    ll sum = 0;
-
-    for(int i = 0; i < n; i++) sum += 2 * edgeWeights[c][i];
-    
-    for(int i = 0; i < economy.size(); i++){
-        int u = economy[i].ss.ff, v = economy[i].ss.ss;
-        if(count[u] == 2 || count[v] == 2 || find(u) == find(v)) continue;
-        sum -= economy[i].ff;
-        count[u]++; count[v]++;
-        unionFind[find(v)] = find(u);
-    }
-    
-    return sum;
 }
 
 int main(int argc, char* argv[]){ 
@@ -231,9 +280,31 @@ int main(int argc, char* argv[]){
         } 
         
         auto start = high_resolution_clock::now();
-        ll ans = LINF;
-        for(ll c = 0; c < n; c++) ans = min(ans, clarkeWright(c));
-        
+
+        ll ans = LINF; // Melhor custo encontrado para esta instância
+        vector<int> best_tour; // Melhor tour encontrado
+
+        // --- Parâmetros do GRASP ---
+        int max_iterations = 100; // Número de iterações do GRASP
+        double alpha = 0.25;       // Fator de aleatoriedade (0.0 = guloso, 1.0 = aleatório)
+
+        for(int iter = 0; iter < max_iterations; iter++) {
+            
+            // 1. Fase de Construção
+            pair<vector<int>, ll> constructed = construct_solution(alpha);
+            vector<int> current_tour = constructed.first;
+            ll current_cost = constructed.second;
+
+            // 2. Fase de Busca Local
+            local_search(current_tour, current_cost);
+            
+            // 3. Atualiza a melhor solução global (para esta instância)
+            if (current_cost < ans) {
+                ans = current_cost;
+                best_tour = current_tour;
+            }
+        }
+
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(end - start);
 
